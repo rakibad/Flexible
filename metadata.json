@@ -1,0 +1,6 @@
+{
+  "name": "FlexiScan OCR",
+  "description": "Offline OCR app for capturing phone numbers from camera preview.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
