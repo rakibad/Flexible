@@ -29,11 +29,28 @@ fun CameraPreviewScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    
+    val cameraController = remember {
+        androidx.camera.view.LifecycleCameraController(context).apply {
+            setEnabledUseCases(androidx.camera.view.CameraController.IMAGE_ANALYSIS)
+        }
+    }
+
+    LaunchedEffect(cameraController, lifecycleOwner) {
+        cameraController.bindToLifecycle(lifecycleOwner)
+    }
+
+    LaunchedEffect(isScanning, analyzer) {
+        if (isScanning) {
+            cameraController.setImageAnalysisAnalyzer(executor, analyzer)
+        } else {
+            cameraController.clearImageAnalysisAnalyzer()
+        }
+    }
 
     LaunchedEffect(isFlashOn) {
-        cameraControl?.enableTorch(isFlashOn)
+        cameraController.enableTorch(isFlashOn)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -41,49 +58,10 @@ fun CameraPreviewScreen(
             factory = { ctx ->
                 PreviewView(ctx).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                    controller = cameraController
                 }
             },
-            modifier = Modifier.fillMaxSize(),
-            update = { previewView ->
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    
-                    if (!isScanning) {
-                        cameraProvider.unbindAll()
-                        return@addListener
-                    }
-
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                        .also {
-                            it.setAnalyzer(executor, analyzer)
-                        }
-
-                    val cameraSelector = CameraSelector.Builder()
-                        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                        .build()
-
-                    try {
-                        cameraProvider.unbindAll()
-                        val camera = cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview,
-                            imageAnalysis
-                        )
-                        cameraControl = camera.cameraControl
-                        camera.cameraControl.enableTorch(isFlashOn)
-                    } catch (exc: Exception) {
-                        exc.printStackTrace()
-                    }
-                }, ContextCompat.getMainExecutor(context))
-            }
+            modifier = Modifier.fillMaxSize()
         )
 
         // Draw bounding box if we have a scanned number
